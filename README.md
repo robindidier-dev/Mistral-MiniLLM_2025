@@ -52,7 +52,9 @@ Motivations :
 
 ## Résultats d’entraînement 
 
-Cette section sera enrichie au fur et à mesure.
+<p align="center">
+  <img src="asset/Entrainement.png" alt="Schéma de l'entraînement" width="600">
+</p>
 
 ---
 
