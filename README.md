@@ -72,10 +72,8 @@ En 5000 itérations, le modèle atteint une **validation loss finale de 1.43**, 
 
 Le modèle (~16M paramètres) montre désormais :
 
-- une **maîtrise correcte de la syntaxe française** ;
-- une **cohérence locale** satisfaisante dans les phrases ;
-- une capacité à **enchaîner des idées simples** ;
-- une **génération stable**, sans explosion de gradients.
+- une **maîtrise plutôt correcte de la syntaxe française** ;
+- une **cohérence locale** satisfaisante dans les phrases.
 
 Il reste cependant limité par :
 
