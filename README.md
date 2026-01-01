@@ -98,7 +98,7 @@ Nous verrons ce que cela donne avec un si petit modèle. Si cela n'est pas conva
 
 Avec le prompt *La science*, voici une génération brute obtenue, conforme aux remarques ci-dessus :
 ```
-La science et pour la Père face au monde. Le mouvement scientifique est un échec : dans la nature, le choc est un phénomène très complexe au sens de la vie de l’être humain ; dans cette nature du mouvement, la science porte l’idée d’une nature naturelle » qui obtient une détermination entre la science et la nature. Cette méthode s’intéresse à la vérité comme l’habitude d’une connaissance qui m’est propre à cette partie. Dans la logique des concepts dans le domaine de l’esprit, des questions ont été traduites par l’auteur mais il est  un phénomène d’expression », une  philosophie d’expression ».
+La science et pour la Père face au monde. Le mouvement scientifique est un échec : dans la nature, le choc est un phénomène très complexe au sens de la vie de l’être humain ; dans cette nature du mouvement, la science porte l’idée d’une nature naturelle » qui obtient une détermination entre la science et la nature. Cette méthode s’intéresse à la vérité comme l’habitude d’une connaissance qui m’est propre à cette partie. Dans la logique des concepts dans le domaine de l’esprit, des questions ont été traduites par l’auteur mais il est  un phénomène d’expression » , une  philosophie d’expression » .
 ```
 ---
 
