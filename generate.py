@@ -2,14 +2,16 @@
 """
 Provisory text generation script.
 
-This script loads a trained LLM, restores the tokenizer, 
+This script loads a trained LLM, restores the tokenizer,
 and performs autoregressive text generation.
 
-Author: Robin 
+Author: Robin
 Date:   December 2025
 """
 
 import os
+import sys
+import time
 import torch
 
 from model import LargeLanguageModel
@@ -20,46 +22,41 @@ from config import (
 )
 
 
-# =========================
 # Tokenizer Loading
-# =========================
-
 TOKENIZER_PATH = "tokenizer.json"
-
 tokenizer = Tokenizer.load(TOKENIZER_PATH)
 
 
 # =========================
-# Model Instantiation
+# Model & Weight Loading
 # =========================
 
-model = LargeLanguageModel(
-    vocab_size=VOCAB_SIZE,
-    n_embd=N_EMBD,
-    n_head=N_HEAD,
-    n_layers=N_LAYERS,
-    block_size=BLOCK_SIZE,
-    dropout=DROPOUT,
-    device=DEVICE
-).to(DEVICE)
+final_path = input("Enter model file name (NAME.pth): ")
 
-
-# =========================
-# Weight Loading
-# =========================
-
-final_path = "LLM.pth"
-
-if os.path.exists(final_path):
-    print("Loading model weights...")
-    state = torch.load(final_path, map_location=DEVICE)
-    model.load_state_dict(state)
-
-else:
+if not os.path.exists(final_path):
     raise FileNotFoundError("No model weights found.")
 
-model.eval()
+print(f"Loading model data from {final_path}...")
+checkpoint = torch.load(final_path, map_location=DEVICE)
 
+conf = checkpoint["config"]
+
+# Instantiate model using the saved configuration
+model = LargeLanguageModel(
+    vocab_size=conf["vocab_size"],
+    n_embd=conf["n_embd"],
+    n_head=conf["n_head"],
+    n_layers=conf["n_layers"],
+    block_size=conf["block_size"],
+    dropout=conf["dropout"],
+    device=DEVICE
+)
+
+# Load weights
+model.load_state_dict(checkpoint["model_state_dict"])
+
+model.to(DEVICE)
+model.eval()
 
 
 # =========================
@@ -75,19 +72,43 @@ context = torch.tensor(
     device=DEVICE
 )
 
-with torch.no_grad():
-    generated = model.generate(
-        context,
-        max_new_tokens=500
-    )[0].tolist()
+# Truncate prompt if it exceeds model context size (BLOCK_SIZE)
+if context.shape[1] > model.block_size:
+    context = context[:, -model.block_size:]
+    print(f"[WARN] Prompt truncated to last {model.block_size} tokens.")
 
+# Temperature of generation
+# 1.0 = standard, < 1.0 = focused, > 1.0 = creative/chaotic.
+temperature = 0.8
+
+with torch.no_grad():
+    raw = model.generate(
+        context,
+        max_new_tokens=500,
+        temperature=temperature
+    )
+
+generated = raw[0].tolist()
 text = tokenizer.decode(generated)
 
+# Cut at the last period 
 last_period = text.rfind(".")
 if last_period != -1:
     text = text[: last_period + 1]
 
 
+# =========================
+# Sequential Animation
+# =========================
+
 print("\nGenerated text:\n")
-print(text)
+
+# Removing �
+clean = text.replace("\uFFFD", "")
+
+for ch in clean:
+    sys.stdout.write(ch)
+    sys.stdout.flush()
+    time.sleep(0.01)  # Adjustable generation speed
+
 print("\n")

@@ -20,7 +20,7 @@ Author: Robin
 Date:   December 2025
 """
 
-import re
+import regex as re
 import heapq
 import json
 from data_utils import load_documents
@@ -29,7 +29,7 @@ from data_utils import load_documents
 # Hyperparameters
 # =========================
 
-VOCAB_SIZE = 5000  # Target vocabulary size 
+VOCAB_SIZE = 8192  # Target vocabulary size 
 
 SPECIAL_TOKENS = {
     "<|pad|>": 256,
@@ -45,6 +45,9 @@ SPECIAL_TOKENS = {
     "<|md_sep|>": 266,       # "---"
     "<|md_code|>": 267,      # "```"
 }
+
+# Regex pattern used in GPT2 model to avoid merging a word with punctuation, etc...
+SPLIT_PATTERN = r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
 
 
 # =========================
@@ -125,10 +128,11 @@ class Tokenizer:
 
     @classmethod
     def load(cls, path):
-        """
-        Load a saved tokenizer from disk.
+        """ Load a saved tokenizer from disk.
+        
         Reconstructs internal structures without retraining.
         """
+
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
@@ -145,59 +149,26 @@ class Tokenizer:
 # Utilities
 # =========================
 
-def preprocess_special_tokens(text):
-    """ Replace frequent structural patterns (Markdown, roles, doc separators)
-    with explicit special tokens before byte-level encoding.
-
-    This ensures stable, non-ambiguous tokens for the BPE training.
-    """
-
-    # 1. Document separator 
-    #    We normalize any variant of <|doc|> to the canonical form.
-    text = text.replace("<|doc|>", " <|doc|> ")
-
-    # 2. Conversation roles 
-    text = text.replace("<|user|>", " <|user|> ")
-    text = text.replace("<|assistant|>", " <|assistant|> ")
-
-    # 3. Markdown patterns 
-    # Code fences ```
-    text = text.replace("```", " <|md_code|> ")
-
-    # Horizontal rule ---
-    text = text.replace("---", " <|md_sep|> ")
-
-    # Headings ###
-    text = text.replace("###", " <|md_heading|> ")
-
-    # Bold **
-    # Use regex to avoid catching "***" or "****"
-    text = re.sub(r"\*\*(?!\*)", " <|md_bold|> ", text)
-
-    # Italic *
-    # Only replace isolated '*' not part of '**'
-    text = re.sub(r"(?<!\*)\*(?!\*)", " <|md_italic|> ", text)
-
-    # Normalize spacing (avoid token collisions)
-    text = re.sub(r"\s+", " ", text).strip()
-
-    return text
 
 
 def build_linked_document(text):
-    """ Encode text into bytes and wrap it into a linked-list Document.
-    
-    Args:
-        text (str): raw text string
-    
-    Returns:
-        Document: linked-list representation of the tokenized document
-    """
+    # Handle special tokens and then apply regex split pattern used in GPT2
+    special_pattern = "|".join(re.escape(k) for k in SPECIAL_TOKENS.keys())
+    pattern = re.compile(f"({special_pattern})|({SPLIT_PATTERN})")
 
-    text = preprocess_special_tokens(text)
-    tokens = list(text.encode("utf-8"))
+    tokens = []
+    # Text is now sliced
+    for match in pattern.finditer(text):
+        chunk = match.group(0)
+        if chunk in SPECIAL_TOKENS:
+            tokens.append(SPECIAL_TOKENS[chunk])
+        else:
+            # Byte per byte encoding of the current slice
+            tokens.extend(chunk.encode("utf-8"))
+
     tokens.append(SPECIAL_TOKENS["<|doc|>"])
     return Document(tokens)
+
 
 
 def initialize_pair_stats(token_docs):
@@ -292,6 +263,7 @@ def apply_single_merge(node, a, b, new_token, pair_stats, pair_occurrences, heap
         add_pair_occurrence((new_token, right.token), node, pair_stats, pair_occurrences, heap)
 
 
+
 def apply_merge(pair, new_token, pair_stats, pair_occurrences, heap):
     """ Apply the merge (a, b) -> new_token incrementally.
 
@@ -326,8 +298,7 @@ def apply_merge(pair, new_token, pair_stats, pair_occurrences, heap):
 # =========================
 
 def train_bpe(docs, vocab_size=VOCAB_SIZE):
-    """
-    Train the tokenizer over multiple documents.
+    """ Train the tokenizer over multiple documents.
 
     Args:
         docs: list of raw text documents (strings)
@@ -353,7 +324,7 @@ def train_bpe(docs, vocab_size=VOCAB_SIZE):
 
     for i in range(num_merges):
 
-        if i % 500 == 0 or i == num_merges - 1:
+        if i % 10 == 0 or i == num_merges - 1:
             print(f"Training BPE: {i}/{num_merges} merges ({100*i/num_merges:.1f}%)")
 
         # Find the most frequent pair with valid occurrences
@@ -391,52 +362,65 @@ def train_bpe(docs, vocab_size=VOCAB_SIZE):
 # =========================
 
 def encode(text, merges):
+    """ Encode text into token ids using GPT-style splitting.
+
+    The text is first split into 'chunks' (words, punctuation, specials)
+    using a regex. Then, BPE merges are applied within each chunk ONLY.
+    
+    This prevents merging across boundaries (e.g. "dog" + "." -> "dog.").
     """
-    Encode text into BPE tokens:
-      - detect special tokens
-      - byte-encode normal text
-      - apply BPE merges
-    """
 
-    # Convert text into initial token list (special tokens + bytes) 
-    special_to_id = SPECIAL_TOKENS
-    special_tokens = sorted(special_to_id.keys(), key=len, reverse=True)
+    # 1. Prepare regex
+    # Combine special tokens and regex pattern
+    special_pattern = "|".join(re.escape(k) for k in SPECIAL_TOKENS.keys())
+    pattern = re.compile(f"({special_pattern})|({SPLIT_PATTERN})")
 
-    tokens = []
-    i = 0
+    final_ids = []
 
-    while i < len(text):
-        # Try to match a special token
-        for sp in special_tokens:
-            if text.startswith(sp, i):
-                tokens.append(special_to_id[sp])
-                i += len(sp)
+    # 2. Process text chunk by chunk
+    for match in pattern.finditer(text):
+        chunk = match.group(0)
+
+        # Special token -> Direct lookup
+        if chunk in SPECIAL_TOKENS:
+            final_ids.append(SPECIAL_TOKENS[chunk])
+            continue
+
+        # Normal text -> Byte encode + BPE
+        ids = list(chunk.encode("utf-8"))
+
+        while len(ids) >= 2:
+            # Find the best pair to merge (lowest rank = learned earliest)
+            best_pair = None
+            min_rank = float("inf")
+
+            for i in range(len(ids) - 1):
+                pair = (ids[i], ids[i+1])
+                if pair in merges:
+                    rank = merges[pair]
+                    if rank < min_rank:
+                        min_rank = rank
+                        best_pair = pair
+            
+            # Stop if no known pairs found
+            if best_pair is None:
                 break
-        else:
-            # No special token -> byte encode
-            b = text[i].encode("utf-8")
-            tokens.extend(b)
-            i += 1
 
-    # Apply BPE merges
-    merged = True
-    while merged:
-        merged = False
-        new_tokens = []
-        i = 0
+            # Apply the merge
+            new_ids = []
+            i = 0
+            while i < len(ids):
+                if i < len(ids) - 1 and (ids[i], ids[i+1]) == best_pair:
+                    new_ids.append(merges[best_pair])
+                    i += 2
+                else:
+                    new_ids.append(ids[i])
+                    i += 1
+            ids = new_ids
 
-        while i < len(tokens):
-            if i + 1 < len(tokens) and (tokens[i], tokens[i+1]) in merges:
-                new_tokens.append(merges[(tokens[i], tokens[i+1])])
-                i += 2
-                merged = True
-            else:
-                new_tokens.append(tokens[i])
-                i += 1
+        final_ids.extend(ids)
 
-        tokens = new_tokens
-
-    return tokens
+    return final_ids
 
 
 # =========================
@@ -444,8 +428,8 @@ def encode(text, merges):
 # =========================
 
 def decode(tokens, merges):
-    """
-    Decode BPE tokens back into a UTF-8 string.
+    """ Decode BPE tokens back into a UTF-8 string.
+    
     Special tokens are restored textually.
     """
 
@@ -473,24 +457,28 @@ def decode(tokens, merges):
         if isinstance(piece, bytes):
             out.append(piece.decode("utf-8", errors="replace"))
         else:
-            out.append(piece)  # special token string
+            out.append(piece)  # Special token string
 
     return "".join(out)
 
 
 if __name__ == "__main__":
-    """ Minimal test driver for the BPE tokenizer.
+    """ Minimal test for the BPE tokenizer.
     
     Trains the tokenizer on the corpus, sample merges and bijectivity checks.
     """
 
     # Load corpus documents
     folder = "corpus_docs"
-    docs = load_documents(folder)
+    corpus = load_documents(folder)
+    print("Training tokenizer...")
+    nb_docs_train = 10
+    training_subset = corpus[:nb_docs_train] 
+    print(f"Using the first {len(training_subset)} documents for tokenizer training.")
 
-    # Train BPE on the corpus
-    tokenizer = Tokenizer(vocab_size=VOCAB_SIZE)
-    tokenizer.train(docs)
+    tokenizer = Tokenizer(VOCAB_SIZE)
+    tokenizer.train(training_subset)
+ 
     merges = tokenizer.merges
 
     print(f"Learned {len(merges)} merge rules.")
@@ -499,6 +487,7 @@ if __name__ == "__main__":
     print("Sample Learned Merges")
     id_to_special = {v: k for k, v in SPECIAL_TOKENS.items()}
     inverse_merges = {v: k for k, v in merges.items()}
+
 
     def decode_token_to_bytes(t):
         """ Recursively decode a token to bytes. """
@@ -510,6 +499,7 @@ if __name__ == "__main__":
             a, b = inverse_merges[t]
             return decode_token_to_bytes(a) + decode_token_to_bytes(b)
         return b''
+
 
     def bytes_to_repr(b):
         """ Show bytes as readable string (with special handling for space). """
@@ -540,26 +530,24 @@ if __name__ == "__main__":
     print("Bijectivity Test")
 
     sample_texts = [
-        "Bonjour le monde",
-        "Ceci est un test **important**",
-        "### Titre principal",
-        "<|doc|> Séparateur explicite",
-        "Texte avec --- séparateur Markdown",
-        "Bloc de code ```print('hello')```",
-        "<|user|> Bonjour <|assistant|> Salut",
+        "Collé<|user|>AuTexte", 
+        "   3 espaces avant. \t Tabulation. \n Nouvelle ligne. ",
+        "<|user|> (Vrai) vs <|user |> (Faux) vs < |user| > (Faux)",
+        "123.45 ou 123,45",
+        "**Gras** et *Italique* collés:**Gras**",
+        "def func():\n    print('Code block')\n    return True",
+        "..................................................",
     ]
 
     for text in sample_texts:
-        # Preprocess special tokens before encoding
-        pre = preprocess_special_tokens(text)
-
-        enc = encode(pre, merges)
+        
+        enc = encode(text, merges)
         dec = decode(enc, merges)
 
-        ok = (dec == pre)
+        # Compare directly with original text 
+        ok = (dec == text)
 
-        print(f"\nText: {text!r}")
-        print(f"Preprocessed: {pre!r}")
-        print(f"Encoded: {enc[:30]}{'...' if len(enc)>30 else ''}")
-        print(f"Decoded: {dec!r}")
+        print(f"\nOriginal:  {text!r}")
+        print(f"Encoded:   {enc[:30]}{'...' if len(enc)>30 else ''}")
+        print(f"Decoded:   {dec!r}")
         print(f"Bijective: {ok}")

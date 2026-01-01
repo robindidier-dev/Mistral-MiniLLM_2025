@@ -17,137 +17,131 @@ import random
 # =========================
 
 def load_corpus(path="corpus.txt"):
-    """ Load the full concatenated corpus as a raw string.
-
-    Args:
-        path (str): Path to the corpus file.
-
-    Returns:
-        str: The full text content of the corpus.
-    """
-
+    """ Load the full concatenated corpus as a raw string. """
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Corpus file not found at: {path}")
+        
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
 
 def load_documents(folder="corpus_docs"):
-    """ Load all .txt documents from a folder as raw strings. Used for tokenizer training.
-
-    Args:
-        folder (str): Folder containing .txt documents.
-
-    Returns:
-        list[str]: List of document contents.
-    """
+    """ Load all .txt documents from a folder as raw strings. """
+    if not os.path.exists(folder):
+        print(f"Folder '{folder}' did not exist.")
+        return []
 
     docs = []
     for filename in sorted(os.listdir(folder)):
         if filename.endswith(".txt"):
             path = os.path.join(folder, filename)
             with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                docs.append(f.read())
+                content = f.read().strip()
+                if content: 
+                    docs.append(content)
     return docs
-
 
 
 # =========================
 # Encoding
 # =========================
 
-def encode_corpus(text, encode_fn, merges):
-    """ Encode the full corpus using the tokenizer's encode() function.
-
+def encode_corpus(text, tokenizer):
+    """ Encode the full corpus using the tokenizer object.
+    
     Args:
         text (str): Raw corpus text.
-        encode_fn (callable): Tokenizer encode function.
-        merges (dict): BPE merge rules.
-
+        tokenizer (Tokenizer): Instance of your Tokenizer class.
+        
     Returns:
         torch.Tensor: Tensor of token IDs.
     """
-
-    tokens = encode_fn(text, merges)
+    tokens = tokenizer.encode(text)
     return torch.tensor(tokens, dtype=torch.long)
-
 
 
 # =========================
 # Block splitting and shuffling
 # =========================
 
-def split_into_blocks(data_tensor, block_size):
-    """ Split a long tensor of tokens into fixed-size blocks.
-
-    Args:
-        data_tensor (torch.Tensor): Token sequence.
-        block_size (int): Length of each block.
-
-    Returns:
-        list[torch.Tensor]: List of blocks of shape [block_size].
+def split_into_blocks(data_list, block_size):
+    """ Split a list of tokens into blocks of size block_size + 1 for autoregressive training. 
+    
+    We drop the remainder (last chunk < block_size) to ensure consistent tensor shapes.
     """
 
-    blocks = [
-        data_tensor[i:i + block_size]
-        for i in range(0, len(data_tensor) - block_size, block_size)
-    ]
+    blocks = []
+    step = block_size + 1 # '+1' because input is [0:-1] and target is [1:]
+
+    # We iterate until len(data) - step to ensure we have a full block
+    for i in range(0, len(data_list) - step + 1, step):
+        block = data_list[i : i + step]
+        blocks.append(block)
+
     return blocks
 
 
 def shuffle_blocks(blocks):
-    """ Shuffle a list of blocks to avoid style bias in train/val split.
-
-    Args:
-        blocks (list[torch.Tensor]): List of token blocks.
-
-    Returns:
-        torch.Tensor: Concatenated shuffled blocks.
-    """
-
+    """ Shuffle a list of blocks to avoid style bias in train/val split. """
     random.shuffle(blocks)
-    return torch.cat(blocks)
-
+    return blocks
 
 
 # =========================
 # Dataset preparation
 # =========================
 
-def build_train_val(shuffled_tensor, train_ratio=0.8):
-    """ Split the shuffled tensor into train and validation sets.
-
-    Args:
-        shuffled_tensor (torch.Tensor): Full shuffled token sequence.
-        train_ratio (float): Fraction of data used for training.
-
-    Returns:
-        dict[str, torch.Tensor]: {"train": ..., "val": ...}
-    """
-
-    n = int(train_ratio * len(shuffled_tensor))
+def build_train_val(blocks, train_ratio=0.9):
+    """ Split a list of independent blocks into train and validation sets. """
+    n = int(train_ratio * len(blocks))
     return {
-        "train": shuffled_tensor[:n],
-        "val": shuffled_tensor[n:]
+        "train": blocks[:n],
+        "val": blocks[n:]
     }
-
 
 
 # =========================
 # Pipeline
 # =========================
 
-def prepare_dataset(corpus_path, tokenizer, block_size, train_ratio=0.8):
-    """ Full dataset preparation pipeline:
-        - load corpus
-        - encode
-        - split into blocks
-        - shuffle
-        - build train/val sets
+def prepare_dataset(documents, tokenizer, block_size, train_ratio=0.9):
+    """ Prepare dataset from a list of raw documents.
+    
+    Args:
+        documents (list of str): List of raw text documents.
+        tokenizer (Tokenizer): Instance of your Tokenizer class.
+        block_size (int): Size of each training block.
+        train_ratio (float): Ratio of data to use for training.
     """
+    
+    all_blocks = []
+    dropped_docs = 0
 
-    text = load_corpus(corpus_path)
-    encoded = tokenizer.encode(text)
-    blocks = split_into_blocks(encoded, block_size)
-    blocks = [torch.tensor(b, dtype=torch.long) for b in blocks]
+    print(f"Encoding {len(documents)} documents...")
 
-    shuffled = shuffle_blocks(blocks)
+    for doc in documents:
+        # 1. Encode via the class method
+        encoded = tokenizer.encode(doc)
+
+        # 2. Split into independent blocks
+        # If document is shorter than (block_size + 1), it generates 0 block.
+        doc_blocks = split_into_blocks(encoded, block_size)
+        
+        if not doc_blocks:
+            dropped_docs += 1
+            continue
+
+        # 3. Convert to Tensors 
+        tensor_blocks = [torch.tensor(b, dtype=torch.long) for b in doc_blocks]
+        all_blocks.extend(tensor_blocks)
+
+    if dropped_docs > 0:
+        print(f" Dropped {dropped_docs} documents shorter than block_size ({block_size}).")
+
+    print(f"Total blocks generated: {len(all_blocks)}")
+
+    # 4. Global shuffle
+    shuffled = shuffle_blocks(all_blocks)
+
+    # 5. Split
     return build_train_val(shuffled, train_ratio)
