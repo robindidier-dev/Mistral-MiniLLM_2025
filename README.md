@@ -53,7 +53,7 @@ Motivations :
 ## Résultats d’entraînement 
 
 <p align="center">
-  <img src="asset/Entrainement.png" alt="Schéma de l'entraînement" width="600">
+  <img src="assets/Entrainement.png" alt="Schéma de l'entraînement" width="600">
 </p>
 
 ---
