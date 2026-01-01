@@ -4,7 +4,7 @@
 
 Motivations :
 - comprendre les mécanismes internes et d’un LLM ainsi que ce qui gravite autour (tokenizer, architecture, entraînement, génération) ;
-- essayer à l'avenir d'en faire un mini agent conversationnel (si la phase de pré-training s'avère concluante).
+- essayer à l'avenir d'en faire un mini agent conversationnel.
 
 ---
 
@@ -12,7 +12,7 @@ Motivations :
 
 - **Corpus propre, diversifié et reproductible** (30M caractères).
 - **Tokenizer BPE** adapté au français (littéraire, conversationnel, théâtre, dialogues restranscrits) avec gestion de tokens spéciaux pour les rôles user/agent.
-- Entraînement du **LLM** (16M paramètres) sur (petit) GPU personnel.
+- Entraînement du **LLM** (16M paramètres) sur laptop personnel.
 - Pipeline complet : **prétraitement → tokenisation → entraînement → génération**.
 
 ---
@@ -22,12 +22,10 @@ Motivations :
 ### **Corpus** (`create_corpus.py`)
 - Extraction de sources publiques (théâtre, dialogues, littérature courte).
 - Nettoyage, normalisation, segmentation.
-- Fichier Python de constitution de ce corpus automatiquement.
 
 ### **Tokenizer BPE** (`tokenizer.py`)
 - Adapté d'un tutoriel d'Andrej Karpathy.
 - Construction d’un vocabulaire optimisé pour le français.
-- Gestion des caractères spéciaux, dialogues, ponctuation.
 - Export du vocabulaire et des merges pour réutilisation sous format JSON.
 
 ### **Modèle** (`model.py`)
@@ -37,13 +35,11 @@ Motivations :
   - multi-head attention
   - feed-forward
   - normalisation
-- Taille adaptable (≈ 10–20M paramètres).
+- Taille adaptable depuis `config.py`.
 
 ### **Entraînement** (`main_train.py`)
-- Boucle d’entraînement simple et lisible.
 - Gestion des checkpoints.
 - Suivi de la loss avec TensorBoard.
-- Génération périodique pour évaluer la progression.
 
 ### **Génération**
 - Script provisoire pour tester le modèle entraîné.
@@ -56,16 +52,47 @@ Motivations :
   <img src="assets/Entrainement.png" alt="Schéma de l'entraînement" width="600">
 </p>
 
+Le training s'est effectué en deux sessions (10 000 itérations puis 3 000 avec un nouvel optimizer, un LR plus faible).
+
+Cette première version montre un apprentissage indéniable du modèle, mais un plateau à **2.7 après 13 000 itérations** pour la validation loss est **surprenant**. En effet, dans son tutoriel, Karpathy descend aux alentours de 1.5 en 5 000 itérations pour des paramètres similaires. Les raisons possibles (ce qui diffère entre sa version et la mienne) :
+
+- mon corpus est **très diversifié et certainement pas assez propre** -> c'est une priorité ;
+- un **tokenizer BPE contenant un bug**, puisqu'il merge les tokens spéciaux (<|doc|>) -> seconde priorité.
+
+Le modèle (~16M paramètres) montre des balbutiements de français qui apparaissent plausible.
+
+
+### Le futur fine‑tuning
+
+Fine-tuner après cet entraînement est inenvisageable selon moi. Il faut d'abord corriger les problèmes mentionnés ci-dessus et peut-être faudra-t-il scale-up le modèle et l'entraîner sur une machine dédiée (CUDA) pour avoir un début de cohérence dans les propos. Cela n'est sûrement pas accessible pour un modèle de 16 M de paramètres.
+
 ---
 
-## Lancer l'entraînement
+## Comment lancer le projet
 
-1. Générer le corpus (non intégré dans le script d'entraînement) : `python create_corpus.py`
+Voici les étapes pour reproduire l’entraînement ou tester le modèle :
 
-2. Vérifier/ajuster les hyperparamètres dans : `config.py`
+### 1. Générer le corpus  
+```bash
+python create_corpus.py
+```
+Crée un corpus dans `corpus_docs/`.
 
-3. Lancer l'entraînement principal : `main_train.py`
-   Le script charge le corpus, crée/charge le tokenizer, prépare le dataset, instancie le modèle, gère les checkpoints et démarre TensorBoard automatiquement.
+### 2. Entraîner le modèle  
+```bash
+python main_train.py
+```
+- Entraîne le tokenizer si nécessaire  
+- Prépare le dataset  
+- Lance l’entraînement du LLM  
+- Sauvegarde checkpoints et logs TensorBoard
+
+### 3. Générer du texte avec le modèle entraîné  
+```bash
+python generate.py
+```
+Permet de tester la génération.
+
 
 
 
