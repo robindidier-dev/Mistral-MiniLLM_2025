@@ -1,6 +1,6 @@
 # Mistral-MiniLLM_2025
 
-**Mistral-MiniLLM_2025** est un projet d'apprentissage et découverte personnel visant à coder et entraîner un **petit modèle de langage français** inspiré des architectures modernes (GPT-like).
+**Mistral-MiniLLM_2025** est un projet d'apprentissage et découverte personnel visant à coder et entraîner un **petit modèle de langage français** inspiré des architectures modernes (GPT-like). Par la suite, j'essayerai de le fine-tuner et adapter à un mode plus conversationnel.
 
 Motivations :
 - comprendre les mécanismes internes et d’un LLM ainsi que ce qui gravite autour (tokenizer, architecture, entraînement, génération) ;
@@ -60,6 +60,74 @@ Motivations :
   <img src="assets/Training_2.png" alt="LR & gradient norm" width="48%">
 </p>
 
+La nouvelle version du pipeline d’entraînement montre une **amélioration nette et mesurable** par rapport à la précédente itération du projet.  
+En 5000 itérations, le modèle atteint une **validation loss finale de 1,43**, contre **2,7 après 13 000 itérations** dans la version antérieure. Cette progression est due à plusieurs facteurs :
+
+- un **corpus mieux nettoyé**, plus homogène et plus massif ;
+- un **tokenizer BPE plus stable**, avec moins de merges inutiles ;
+- la **modification des hyperparamètres dans `config.py`**, avec augmentation du contexte ;
+- une **meilleure gestion de l’entraînement** (micro-batches, clipping, scheduler cosine, suivi des gradients).
+
+### Capacités actuelles du modèle
+
+Le modèle (~16M paramètres) montre désormais :
+
+- une **maîtrise correcte de la syntaxe française** ;
+- une **cohérence locale** satisfaisante dans les phrases ;
+- une capacité à **enchaîner des idées simples** ;
+- une **génération stable**, sans explosion de gradients.
+
+Il reste cependant limité par :
+
+- aucune **cohérence sémantique** ;
+- un manque de **contrôle thématique** ;
+- une **compréhension inexistante**.
+
+Ces limites sont normales pour un modèle de cette taille, entraîné from scratch sur un corpus modeste.
+
+
+### Prochaine étape : le fine‑tuning
+
+La suite logique du projet sera une phase de **fine‑tuning instructionnel**, avec :
+
+- des jeux de données structurés (dialogues, QA, instructions) ;
+- des tokens spéciaux pour les rôles *user/assistant*.
+
+Nous verrons ce que cela donne avec un si petit modèle. Si cela n'est pas convaincant, j'essayerai de scale-up ce dernier et l'entraîner sur une machine performante (sur CUDA).
+
+
+### Un petit exemple de génération obtenue
+
+Avec le prompt *La science*, voici une génération brute obtenue, conforme aux remarques ci-dessus :
+```
+La science et pour la Père face au monde. Le mouvement scientifique est un échec : dans la nature, le choc est un phénomène très complexe au sens de la vie de l’être humain ; dans cette nature du mouvement, la science porte l’idée d’une nature naturelle » qui obtient une détermination entre la science et la nature. Cette méthode s’intéresse à la vérité comme l’habitude d’une connaissance qui m’est propre à cette partie. Dans la logique des concepts dans le domaine de l’esprit, des questions ont été traduites par l’auteur mais il est  un phénomène d’expression », une  philosophie d’expression ».
+```
+---
+
+## Comment lancer le projet
+
+Voici les étapes pour reproduire l’entraînement ou tester le modèle :
+
+### 1. Générer le corpus  
+```bash
+python create_corpus.py
+```
+Crée un corpus propre et normalisé dans `corpus_docs/`.
+
+### 2. Entraîner le modèle  
+```bash
+python main_train.py
+```
+- Entraîne le tokenizer si nécessaire  
+- Prépare le dataset  
+- Lance l’entraînement du LLM  
+- Sauvegarde checkpoints et logs TensorBoard
+
+### 3. Générer du texte avec le modèle entraîné  
+```bash
+python generate.py
+```
+Permet de tester la génération séquentielle avec différents paramètres (température, longueur, etc.).
 
 
 
