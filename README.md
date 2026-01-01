@@ -40,7 +40,7 @@ Motivations :
   - multi-head attention
   - feed-forward
   - normalisation
-- Taille adaptable (≈ 10–20M paramètres).
+- Taille adaptable depuis `config.py`.
 
 ### **Entraînement** (`main_train.py`)
 (Nouvelle version -> Meilleure gestion des sauvegardes, micro-baches pour augmenter la taille du contexte)
