@@ -55,7 +55,11 @@ Motivations :
 
 ## Résultats d’entraînement 
 
-Cette section sera enrichie au fur et à mesure.
+<p align="center">
+  <img src="assets/Training.png" alt="Training loss & LR" width="48%">
+  <img src="assets/Training_2.png" alt="LR & gradient norm" width="48%">
+</p>
+
 
 
 
