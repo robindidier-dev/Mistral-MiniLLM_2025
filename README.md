@@ -26,7 +26,7 @@ Motivations :
 
 
 ### **Tokenizer BPE** (`tokenizer.py`)
-(Nouvelle version -> fix des bugs de merges inutiles.)
+(Nouvelle version -> fix des bugs de merges inutiles)
 - Adapté d'un tutoriel d'Andrej Karpathy.
 - Construction d’un vocabulaire optimisé pour le français.
 - Gestion des caractères spéciaux + tokens spéciaux qui pourront servir pour le fine-tuning et le mode 'agent conversationnel'.
@@ -61,7 +61,7 @@ Motivations :
 </p>
 
 La nouvelle version du pipeline d’entraînement montre une **amélioration nette et mesurable** par rapport à la précédente itération du projet.  
-En 5000 itérations, le modèle atteint une **validation loss finale de 1,43**, contre **2,7 après 13 000 itérations** dans la version antérieure. Cette progression est due à plusieurs facteurs :
+En 5000 itérations, le modèle atteint une **validation loss finale de 1.43**, contre **2.7 après 13 000 itérations** dans la version antérieure. Cette progression est due à plusieurs facteurs :
 
 - un **corpus mieux nettoyé**, plus homogène et plus massif ;
 - un **tokenizer BPE plus stable**, avec moins de merges inutiles ;
